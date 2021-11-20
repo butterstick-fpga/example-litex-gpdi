@@ -174,7 +174,7 @@ class BaseSoC(SoCCore):
         platform.add_extension(butterstick_r1d0._uart_debug)
 
         # SoCCore ----------------------------------------------------------------------------------
-        SoCCore.__init__(self, platform, clk_freq=sys_clk_freq, csr_data_width=32, integrated_rom_size=32*1024, integrated_sram_size=16*1024, uart_baudrate=1000000)        
+        SoCCore.__init__(self, platform, clk_freq=sys_clk_freq, csr_data_width=32, integrated_rom_size=8*1024, integrated_sram_size=1*1024, uart_baudrate=1000000)        
 
         
         # CRG --------------------------------------------------------------------------------------
@@ -200,8 +200,8 @@ class BaseSoC(SoCCore):
         #self.submodules.tmds_phy = tmds_phy = VideoHDMIPHY(platform.request("hdmi_out"), clock_domain='video')
         self.submodules.tmds_phy = tmds_phy = HDMI(platform.request("hdmi_out")) # This HDMI PHY seems to be slightly faster, compared to the stock LiteX one
         
-        self.add_video_framebuffer(phy=tmds_phy, timings="800x600@60Hz", clock_domain='video', format="rgb888")
-
+        self.add_video_framebuffer(phy=tmds_phy, timings="800x600@60Hz", clock_domain='video', format="rgb565")
+        
         # VCCIO Control ----------------------------------------------------------------------------
         self.submodules.vccio = VccIo(platform.request("vccio_ctrl"))
 
