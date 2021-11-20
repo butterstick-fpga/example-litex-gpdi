@@ -38,6 +38,7 @@ int main(int i, char **c) {
     video_framebuffer_dma_enable_write(0);
 
 	memcpy(MAIN_RAM_BASE, SPIFLASH_BASE + 0x400000, video_framebuffer_dma_length_read());
+    flush_l2_cache();
 
     video_framebuffer_dma_enable_write(1);
     video_framebuffer_vtg_enable_write(1);
