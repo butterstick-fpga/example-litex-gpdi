@@ -189,7 +189,8 @@ class BaseSoC(SoCCore):
         self.add_sdram("sdram",
             phy           = self.ddrphy,
             module        = MT41K256M16(sys_clk_freq, "1:2"),
-            l2_cache_size = kwargs.get("l2_size", 8192)
+            l2_cache_size = kwargs.get("l2_size", 8192),
+            l2_cache_reverse=False,
         )
 
         self.add_constant("UART_POLLING")
@@ -197,10 +198,9 @@ class BaseSoC(SoCCore):
         # GPDI -----------------------------------------------------------------------------------
         platform.add_extension(_syzygy_gpdi)
         #self.submodules.tmds_phy = tmds_phy = VideoHDMIPHY(platform.request("hdmi_out"), clock_domain='video')
-        self.submodules.tmds_phy = tmds_phy = HDMI(platform.request("hdmi_out"))
+        self.submodules.tmds_phy = tmds_phy = HDMI(platform.request("hdmi_out")) # This HDMI PHY seems to be slightly faster, compared to the stock LiteX one
         
         self.add_video_framebuffer(phy=tmds_phy, timings="800x600@60Hz", clock_domain='video', format="rgb888")
-        #self.add_video_colorbars(phy=tmds_phy, timings="1280x720@60Hz", clock_domain='video')
 
         # VCCIO Control ----------------------------------------------------------------------------
         self.submodules.vccio = VccIo(platform.request("vccio_ctrl"))
