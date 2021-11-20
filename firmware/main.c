@@ -26,7 +26,7 @@ int main(int i, char **c) {
     vccio_ch0_write(6500);  // 3v3
     vccio_ch1_write(6500);  // 3v3
     vccio_ch2_write(6500);  // 3v3
-    msleep(10);
+    busy_wait(10);
     vccio_enable_write(1);
 
 
