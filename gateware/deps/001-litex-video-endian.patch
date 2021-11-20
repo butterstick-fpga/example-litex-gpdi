@@ -1,0 +1,21 @@
+diff --git a/litex/soc/cores/video.py b/litex/soc/cores/video.py
+index f15ace23..c2698f76 100644
+--- a/litex/soc/cores/video.py
++++ b/litex/soc/cores/video.py
+@@ -640,7 +640,7 @@ class VideoFrameBuffer(Module, AutoCSR):
+         # Elsif DRAM Data Width <= depth or Video clock is slower than sys_clk:
+         else:
+             # Do Data-Width Conversion first...
+-            self.submodules.conv = stream.Converter(dram_port.data_width, depth)
++            self.submodules.conv = stream.Converter(dram_port.data_width, depth, reverse=True)
+             self.comb += self.dma.source.connect(self.conv.sink)
+             # ... and then Clock Domain Crossing.
+             self.submodules.cdc = stream.ClockDomainCrossing([("data", depth)], cd_from="sys", cd_to=clock_domain)
+@@ -657,7 +657,6 @@ class VideoFrameBuffer(Module, AutoCSR):
+             If(vtg_sink.valid & vtg_sink.de,
+                 video_pipe_source.connect(source, keep={"valid", "ready"}),
+                 vtg_sink.ready.eq(source.valid & source.ready),
+-
+             ),
+             vtg_sink.connect(source, keep={"de", "hsync", "vsync"}),
+             If(depth == 32,

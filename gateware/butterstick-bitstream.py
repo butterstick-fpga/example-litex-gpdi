@@ -164,7 +164,7 @@ class BaseSoC(SoCCore):
     }
     interrupt_map.update(SoCCore.interrupt_map)
 
-    def __init__(self, sys_clk_freq=int(85e6), toolchain="trellis", **kwargs):
+    def __init__(self, sys_clk_freq=int(80e6), toolchain="trellis", **kwargs):
         # Board Revision ---------------------------------------------------------------------------
         revision = kwargs.get("revision", "0.2")
         device = kwargs.get("device", "25F")
@@ -196,8 +196,8 @@ class BaseSoC(SoCCore):
         
         # GPDI -----------------------------------------------------------------------------------
         platform.add_extension(_syzygy_gpdi)
-        self.submodules.tmds_phy = tmds_phy = VideoHDMIPHY(platform.request("hdmi_out"), clock_domain='video')
-        #self.submodules.tmds_phy = tmds_phy = HDMI(platform.request("hdmi_out"))
+        #self.submodules.tmds_phy = tmds_phy = VideoHDMIPHY(platform.request("hdmi_out"), clock_domain='video')
+        self.submodules.tmds_phy = tmds_phy = HDMI(platform.request("hdmi_out"))
         
         self.add_video_framebuffer(phy=tmds_phy, timings="800x600@60Hz", clock_domain='video', format="rgb888")
         #self.add_video_colorbars(phy=tmds_phy, timings="1280x720@60Hz", clock_domain='video')

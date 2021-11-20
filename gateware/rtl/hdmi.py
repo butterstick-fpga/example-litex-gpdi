@@ -39,7 +39,7 @@ class HDMI(Module):
 
         # Generate strobe signal every 5 video_shift clks
         load_sr = Signal()
-        count = Signal(5, reset=0b00100)
+        count = Signal(5, reset=0b10000)
         self.sync.video5x += count.eq(Cat(count[-1], count[:-1]))
         self.comb += load_sr.eq(count[0])
 
@@ -53,9 +53,9 @@ class HDMI(Module):
             self.es0.load_sr.eq(load_sr),
             self.es1.load_sr.eq(load_sr),
             self.es2.load_sr.eq(load_sr),
-            self.es0.d.eq(sink.b),
+            self.es0.d.eq(sink.r),
             self.es1.d.eq(sink.g),
-            self.es2.d.eq(sink.r),
+            self.es2.d.eq(sink.b),
             self.es0.c.eq(Cat(sink.hsync, sink.vsync)),
             self.es1.c.eq(0),
             self.es2.c.eq(0),
