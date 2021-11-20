@@ -41,3 +41,6 @@
 [submodule "gateware/deps/litespi"]
 	path = gateware/deps/litespi
 	url = https://github.com/litex-hub/litespi.git
+[submodule "gateware/deps/litedram"]
+	path = gateware/deps/litedram
+	url = https://github.com/enjoy-digital/litedram.git
