@@ -41,7 +41,7 @@ jobs:
 
     - name: Patch
       working-directory: ./gateware/deps
-      run: git apply --verbose --directory=gateware/deps/luna 001-luna-connect.patch
+      run: git apply --verbose --directory=gateware/deps/litex 001-litex-video-endian.patch
 
     - name: Litex build
       working-directory: ./gateware
@@ -57,7 +57,7 @@ jobs:
     - name: Upload dfu update file
       uses: actions/upload-artifact@v2
       with:
-        name: bootloader binary
+        name: gateware binary
         path: ${{ github.workspace }}/gateware/build/butterstick_r1d0/gateware/butterstick_r1d0.dfu
   
   # release:
