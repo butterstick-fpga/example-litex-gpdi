@@ -9,35 +9,14 @@ endif
 CFLAGS += -I$(FW_DIRECTORY)/include
 CFLAGS += -DI2C_FREQ_HZ=400
 
-TINYUSB_DIR := $(FW_DIRECTORY)/deps/tinyusb
-
-TINYUSB_SRC := 	$(TINYUSB_DIR)/src/tusb.c \
-				$(TINYUSB_DIR)/src/device/usbd.c \
-				$(TINYUSB_DIR)/src/device/usbd_control.c \
-				$(TINYUSB_DIR)/src/common/tusb_fifo.c \
-				$(TINYUSB_DIR)/src/class/dfu/dfu_rt_device.c 
-
-TINYUSB_OBJ := $(notdir $(TINYUSB_SRC:.c=.o))
-
-CFLAGS += 	-I$(TINYUSB_DIR)/hw \
-			-I$(TINYUSB_DIR)/src \
-			-DCFG_TUSB_MCU=OPT_MCU_LUNA_EPTRI \
-			-fdata-sections -ffunction-sections -fsingle-precision-constant -fno-strict-aliasing 
-			
-vpath %.c $(dir $(TINYUSB_SRC)) $(FW_DIRECTORY) $(FW_DIRECTORY)/luna/eptri
-vpath %.S $(FW_DIRECTORY)
+vpath %.c  $(FW_DIRECTORY)
+vpath %.S  $(FW_DIRECTORY)
 
 OBJECTS =  	crt0.o \
-			main.o	\
-			sleep.o \
-			flash.o \
-			dcd_eptri.o \
-			usb_descriptors.o 		   		
+			main.o	
 
-OBJECTS += $(TINYUSB_OBJ)
-
-all: oc-fw.bin
-	$(PYTHON) -m litex.soc.software.memusage oc-fw.elf $(CURDIR)/../include/generated/regions.ld $(TRIPLE)
+all: fw.bin
+	$(PYTHON) -m litex.soc.software.memusage fw.elf $(CURDIR)/../include/generated/regions.ld $(TRIPLE)
 
 %.bin: %.elf
 	$(OBJCOPY) -O binary $< $@
@@ -50,7 +29,7 @@ else
 	$(PYTHON) -m litex.soc.software.mkmscimg $@
 endif
 
-oc-fw.elf: $(FW_DIRECTORY)/linker.ld $(OBJECTS)
+fw.elf: $(FW_DIRECTORY)/linker.ld $(OBJECTS)
 
 vpath %.a $(PACKAGES:%=../%)
 
@@ -77,6 +56,6 @@ endif
 
 
 clean:
-	$(RM) $(OBJECTS) oc-fw.elf oc-fw.bin .*~ *~
+	$(RM) $(OBJECTS) fw.elf fw.bin .*~ *~
 
 .PHONY: all clean

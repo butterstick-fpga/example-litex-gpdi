@@ -36,8 +36,14 @@ from litex.soc.cores.clock import *
 from litex.soc.cores.clock.common import period_ns
 from litex.soc.cores.gpio import GPIOOut, GPIOIn
 from litex.soc.cores.spi_flash import SpiFlashDualQuad
+from litex.soc.cores.video import VideoHDMIPHY
+
+from litedram.modules import MT41K256M16
+from litedram.phy import ECP5DDRPHY
 
 from rtl.platform import butterstick_r1d0
+from rtl.syzygy_gpdi import _syzygy_gpdi
+from rtl.hdmi import HDMI
 from rtl.eptri import LunaEpTriWrapper
 from rtl.rgb import Leds
 from rtl.vccio import VccIo
@@ -53,6 +59,8 @@ class CRG(Module):
         self.clock_domains.cd_usb      = ClockDomain()
         self.clock_domains.cd_sys2x    = ClockDomain()
         self.clock_domains.cd_sys2x_i  = ClockDomain()
+        self.clock_domains.cd_video      = ClockDomain()
+        self.clock_domains.cd_video5x      = ClockDomain(reset_less=True)
 
 
         # # #
@@ -73,7 +81,6 @@ class CRG(Module):
         por_done  = Signal()
         platform.add_period_constraint(clk30, period_ns(30e6))
 
-        sys2x_clk_ecsout = Signal()
         self.submodules.pll = pll = ECP5PLL()
 
         # Power on reset 10ms.
@@ -82,26 +89,45 @@ class CRG(Module):
         self.comb += por_done.eq(pll.locked & (por_count == 0))
         self.sync.por += If(~por_done, por_count.eq(por_count - 1))
 
-        usb_por_done = Signal()
-        usb_por_count = Signal(24, reset=int(60e6 * 10e-3))
-        self.comb += usb_por_done.eq(usb_por_count == 0)
-        self.comb += self.cd_usb.clk.eq(self.cd_sys.clk)
-        self.comb += self.cd_usb.rst.eq(~usb_por_done)
+        # generate video clocks 74.25e6
+        video_freq = 40e6
 
-        self.sync.init += If(~usb_por_done, usb_por_count.eq(usb_por_count - 1))
+
+
+        if video_freq == 74.25e6:
+            self.clock_domains.cd_video_step      = ClockDomain()
+            self.submodules.pll_video0 = pll_video0 = ECP5PLL()
+            pll_video0.register_clkin(clk30, 30e6)
+            pll_video0.create_clkout(self.cd_video_step, 292.5e6, margin=0, with_reset=False)
+
+            self.submodules.pll_video = pll_video = ECP5PLL()
+            pll_video.register_clkin(ClockSignal('video_step'), 292.5e6)
+
+            pll_video.create_clkout(self.cd_video, video_freq, margin=0)
+            pll_video.create_clkout(self.cd_video5x, video_freq*5, margin=0, with_reset=False)
+
+            self.specials += [
+                AsyncResetSynchronizer(self.cd_video_step,  ~por_done | ~pll_video.locked),
+                # AsyncResetSynchronizer(self.cd_video,  ~por_done | ~pll_video.locked),
+                # AsyncResetSynchronizer(self.cd_video5x,  ~por_done | ~pll_video.locked),
+                
+            ]
+        else:
+            self.submodules.pll_video = pll_video = ECP5PLL()
+            pll_video.register_clkin(clk30, 30e6)
+
+            pll_video.create_clkout(self.cd_video, video_freq, margin=0)
+            pll_video.create_clkout(self.cd_video5x, video_freq*5, margin=0, with_reset=False)
+
 
 
         # PLL
         pll.register_clkin(clk30, 30e6)
         pll.create_clkout(self.cd_sys2x_i, 2*sys_clk_freq, with_reset=False)
-        pll.create_clkout(self.cd_init, 30e6, with_reset=False)
+        pll.create_clkout(self.cd_init, 25e6, with_reset=False)
         self.specials += [
-            Instance("ECLKBRIDGECS",
-                i_CLK0   = self.cd_sys2x_i.clk,
-                i_SEL    = 0,
-                o_ECSOUT = sys2x_clk_ecsout),
             Instance("ECLKSYNCB",
-                i_ECLKI = sys2x_clk_ecsout,
+                i_ECLKI = self.cd_sys2x_i.clk,
                 i_STOP  = self.stop,
                 o_ECLKO = self.cd_sys2x.clk),
             Instance("CLKDIVF",
@@ -138,21 +164,43 @@ class BaseSoC(SoCCore):
     }
     interrupt_map.update(SoCCore.interrupt_map)
 
-    def __init__(self, sys_clk_freq=int(60e6), toolchain="trellis", **kwargs):
+    def __init__(self, sys_clk_freq=int(85e6), toolchain="trellis", **kwargs):
         # Board Revision ---------------------------------------------------------------------------
         revision = kwargs.get("revision", "0.2")
         device = kwargs.get("device", "25F")
 
         platform = butterstick_r1d0.ButterStickPlatform()
 
-        # Serial -----------------------------------------------------------------------------------
         platform.add_extension(butterstick_r1d0._uart_debug)
 
         # SoCCore ----------------------------------------------------------------------------------
         SoCCore.__init__(self, platform, clk_freq=sys_clk_freq, csr_data_width=32, integrated_rom_size=32*1024, integrated_sram_size=16*1024, uart_baudrate=1000000)        
+
         
         # CRG --------------------------------------------------------------------------------------
         self.submodules.crg = crg = CRG(platform, sys_clk_freq)
+
+        # DRAM
+        self.submodules.ddrphy = ECP5DDRPHY(
+                platform.request("ddram"),
+                sys_clk_freq=sys_clk_freq)
+        self.comb += self.crg.stop.eq(self.ddrphy.init.stop)
+        self.comb += self.crg.reset.eq(self.ddrphy.init.reset)
+        self.add_sdram("sdram",
+            phy           = self.ddrphy,
+            module        = MT41K256M16(sys_clk_freq, "1:2"),
+            l2_cache_size = kwargs.get("l2_size", 8192)
+        )
+
+        self.add_constant("UART_POLLING")
+        
+        # GPDI -----------------------------------------------------------------------------------
+        platform.add_extension(_syzygy_gpdi)
+        self.submodules.tmds_phy = tmds_phy = VideoHDMIPHY(platform.request("hdmi_out"), clock_domain='video')
+        #self.submodules.tmds_phy = tmds_phy = HDMI(platform.request("hdmi_out"))
+        
+        self.add_video_framebuffer(phy=tmds_phy, timings="800x600@60Hz", clock_domain='video', format="rgb888")
+        #self.add_video_colorbars(phy=tmds_phy, timings="1280x720@60Hz", clock_domain='video')
 
         # VCCIO Control ----------------------------------------------------------------------------
         self.submodules.vccio = VccIo(platform.request("vccio_ctrl"))
@@ -161,7 +209,6 @@ class BaseSoC(SoCCore):
         from litespi.modules import W25Q128JV
         from litespi.opcodes import SpiNorFlashOpCodes as Codes
         self.add_spi_flash(mode="4x", module=W25Q128JV(Codes.READ_1_1_4), with_master=True)
-
 
         # Leds -------------------------------------------------------------------------------------
         led = platform.request("led_rgb_multiplex")
@@ -176,23 +223,6 @@ class BaseSoC(SoCCore):
         # Buttons ----------------------------------------------------------------------------------
         self.submodules.button = GPIOIn(platform.request("user_btn"))
 
-        # USB --------------------------------------------------------------------------------------
-        self.submodules.usb = LunaEpTriWrapper(self.platform, base_addr=self.mem_map['usb'])
-        self.add_memory_region("usb", self.mem_map['usb'], 0x10000, type="");
-        self.add_wb_slave(self.mem_map['usb'], self.usb.bus)
-        for name, irq in self.usb.irqs.items():
-            name = 'usb_{}'.format(name)
-            class DummyIRQ(Module):
-                def __init__(self, irq):
-                    class DummyEV(Module):
-                        def __init__(self, irq):
-                            self.irq = irq
-                    self.submodules.ev = DummyEV(irq)
-
-            setattr(self.submodules, name, DummyIRQ(irq))
-            self.add_interrupt(name)
-
-
         #Add GIT repo to the firmware
         git_rev_cmd = subprocess.Popen("git describe --tags --first-parent --always".split(),
                         stdout=subprocess.PIPE,
@@ -200,7 +230,7 @@ class BaseSoC(SoCCore):
         (git_stdout, _) = git_rev_cmd.communicate()
         self.add_constant('CONFIG_REPO_GIT_DESC',git_stdout.decode('ascii').strip('\n'))
 
-    # This function will build our software and create a oc-fw.init file that can be patched directly into blockram in the FPGA
+    # This function will build our software and create a fw.init file that can be patched directly into blockram in the FPGA
     def PackageFirmware(self, builder):  
         self.finalize()
 
@@ -213,7 +243,7 @@ class BaseSoC(SoCCore):
         builder._generate_includes()
         builder._generate_rom_software(compile_bios=False)
 
-        firmware_file = os.path.join(builder.output_dir, "software", "fw","oc-fw.bin")
+        firmware_file = os.path.join(builder.output_dir, "software", "fw","fw.bin")
         firmware_data = get_mem_data(firmware_file, self.cpu.endianness)
         self.initialize_rom(firmware_data)
 
@@ -254,9 +284,9 @@ def main():
     #generate_docs(soc, "build/documentation/", project_name="OrangeCrab Test SoC", author="Greg Davill")
         
     # Check if we have the correct files
-    firmware_file = os.path.join(builder.output_dir, "software", "fw", "oc-fw.bin")
+    firmware_file = os.path.join(builder.output_dir, "software", "fw", "fw.bin")
     firmware_data = get_mem_data(firmware_file, soc.cpu.endianness)
-    firmware_init = os.path.join(builder.output_dir, "software", "fw", "oc-fw.init")
+    firmware_init = os.path.join(builder.output_dir, "software", "fw", "fw.init")
     CreateFirmwareInit(firmware_data, firmware_init)
     
     rand_rom = os.path.join(builder.output_dir, "gateware", "rand.data")
